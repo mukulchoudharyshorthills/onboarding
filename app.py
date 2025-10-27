@@ -130,6 +130,7 @@ def getUserLogs():
 @app.route('/verifyDocumentData', methods=['GET'])
 def verifyDocData():
     id = request.args.get('id')
+    user_id = request.args.get('user_id')
     if not id:
         return jsonify({'error': 'Missing document id'}), 400
 
@@ -137,7 +138,17 @@ def verifyDocData():
         {"_id": ObjectId(id), "status": "unverified"},
         {"$set": {"status": "verified"}}
     )
+
+    checkAndVerifyUser(user_id)
     return jsonify({'message': 'Document data verified successfully'}), 200
+
+def checkAndVerifyUser(user_id):
+    unverified_docs = documents.find_one({"user_id": ObjectId(user_id), "status": "unverified"})
+    if not unverified_docs:
+        users.update_one(
+            {"_id": ObjectId(user_id), "status": "unverified"},
+            {"$set": {"status": "verified"}}
+        )
 
 @app.route('/editedDocumentData', methods=['POST'])
 def editedDocData():

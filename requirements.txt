@@ -4,3 +4,5 @@ python-dotenv
 pymupdf
 azure-ai-openai
 azure-core
+pytest
+pytest-mock
