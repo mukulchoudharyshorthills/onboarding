@@ -4,11 +4,11 @@ import os
 import time
 from datetime import datetime
 from bson import ObjectId
-from utils import convert_pdf_to_images, extract_pii_from_image
 from dotenv import load_dotenv
 
-
 load_dotenv()
+
+from utils import convert_pdf_to_images, extract_pii_from_image, upload_file_to_blob
 
 app = Flask(__name__)
 
@@ -88,6 +88,7 @@ def upload_file():
             file.filename = f"{name}_{timestamp}{ext}"
             file_path = f"./input/{file.filename}"
         file.save(file_path)
+        blob_path = upload_file_to_blob(file_path, file.filename)
 
         results = []
         if file.filename.lower().endswith('.pdf'):
@@ -103,6 +104,7 @@ def upload_file():
         result = documents.insert_one({
             "user_id": ObjectId(request.form.get('user_id')),
             "path": file_path,
+            "blob_path": blob_path,
             "title": request.form.get('title', ''),
             "tag": request.form.get('tag', ''),
             "data": results,

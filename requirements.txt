@@ -2,7 +2,9 @@ flask
 pymongo
 python-dotenv
 pymupdf
-azure-ai-openai
+#azure-ai-openai
+azure-ai-inference
 azure-core
 pytest
 pytest-mock
+azure-storage-blob
