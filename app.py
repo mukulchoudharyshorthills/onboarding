@@ -1,13 +1,12 @@
+from dotenv import load_dotenv
+
+load_dotenv()
 from flask import Flask, request, redirect, url_for, render_template, jsonify
 from models import users, loginlogs, documents, user_helper, document_helper, log_helper
 import os
 import time
 from datetime import datetime
 from bson import ObjectId
-from dotenv import load_dotenv
-
-load_dotenv()
-
 from utils import convert_pdf_to_images, extract_pii_from_image, upload_file_to_blob
 
 app = Flask(__name__)
@@ -15,6 +14,40 @@ app = Flask(__name__)
 @app.route('/ping')
 def ping():
    return 'pong!'
+
+@app.route('/test', methods=['POST'])
+def test():
+    if 'files' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+
+    allowed_ext = ('.pdf', '.png', '.jpg', '.jpeg', '.tiff', '.tif')
+    files = request.files.getlist('files')
+    uploadedFiles = []
+    responses = []
+    for file in files:
+        if file.filename == '':
+            responses.append({'error': 'No selected file', 'filename': file.filename})
+            continue
+        if not file.filename.lower().endswith(allowed_ext):
+            return jsonify({'error': 'Please upload a PDF or image file'}), 400
+        #prompt_file = f"./prompts/prompt_file.txt"
+        file_path = f"./input/{file.filename}"
+        
+        if os.path.exists(file_path):
+            timestamp = int(time.time())
+            name, ext = os.path.splitext(file.filename)
+            file.filename = f"{name}_{timestamp}{ext}"
+            file_path = f"./input/{file.filename}"
+        file.save(file_path)
+        #blob_path = upload_file_to_blob(file_path, file.filename)
+        images = convert_pdf_to_images(file_path)
+        results = []
+        for img_path in images:
+            pii = extract_pii_from_image(img_path)
+            results.append(pii)
+        uploadedFiles.append({'filename': file.filename, 'result': results})
+
+    return jsonify({'message': 'File(s) uploaded successfully', 'uploaded_files': uploadedFiles }), 200
 
 @app.route('/login', methods=['GET'])
 def login():

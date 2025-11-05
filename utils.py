@@ -4,19 +4,19 @@ import tempfile
 #from azure.ai.openai import OpenAIClient
 from azure.ai.inference import ChatCompletionsClient
 from azure.core.credentials import AzureKeyCredential
-from azure.storage.blob import BlobServiceClient, BlobClient
+from azure.storage.blob import ContainerClient
 import base64
 import json
+import requests
 
 AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT')
 AZURE_OPENAI_KEY = os.getenv('AZURE_OPENAI_KEY')
 AZURE_OPENAI_DEPLOYMENT = os.getenv('AZURE_OPENAI_DEPLOYMENT')
 
-ACCOUNT_NAME = os.getenv("AZURE_STORAGE_ACCOUNT_NAME")
-ACCOUNT_KEY = os.getenv("AZURE_STORAGE_ACCOUNT_KEY")
+AZURE_SAS_URL = os.getenv("AZURE_SAS_URL")
 CONTAINER_NAME = os.getenv("AZURE_CONTAINER_NAME")
 
-client = ChatCompletionsClient(AZURE_OPENAI_ENDPOINT, AzureKeyCredential(AZURE_OPENAI_KEY))
+client = ChatCompletionsClient(endpoint=AZURE_OPENAI_ENDPOINT, credential=AzureKeyCredential(AZURE_OPENAI_KEY))
 
 
 #SYSTEM_PROMPT = (
@@ -26,23 +26,14 @@ client = ChatCompletionsClient(AZURE_OPENAI_ENDPOINT, AzureKeyCredential(AZURE_O
 SYSTEM_PROMPT = (
     """You are a data entry professional and you must analyze a document, extract relevant information and report it. 
 
-    I'll give you a pdf document or a image from which you must extract:
-    * **name**: a string representing the name of a person
-    * **surname**: a string representing the surname of a person
-    * **birth_date**: a date, in the format YYYY-MM-DD, representing the birth dateof a person
-    * **sex**: a single character (either "F" or "M"), representing the sex of the person
+    I'll give you a pdf document or a image from which you must extract personal identifiable information (PII).
 
     * Input *
     A pdf or image file containing text and images. It can be possibly the result of a scanned file.
 
     * Output *
-    You must extract the field specified above and return them as a valid JSON object. Below an example:
-    {
-        "name": "Mark",
-        "surname": "Twain",
-        "sex": "M",
-        "birth_date": "1835-11-30"
-    }"""
+    You must extract the personal information and return them as a valid JSON object. Dont add word json to the result.
+    """
 )
 
 def extract_pii_from_image(image_path):
@@ -50,22 +41,40 @@ def extract_pii_from_image(image_path):
         img_bytes = img_file.read()
         img_data = base64.b64encode(img_bytes).decode('utf-8')
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+    """messages = [
         {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Extract PII from this image."},
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_data}"}}
-            ]
-        }
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": SYSTEM_PROMPT},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_data}"}}
+                ]
+            }
     ]
-
-    response = client.get_chat_completions(
-        deployment_id=AZURE_OPENAI_DEPLOYMENT,
+    print(client)
+    response = client.complete(
+        model=AZURE_OPENAI_DEPLOYMENT,
         messages=messages
-    )
-
+    )"""
+    payload = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": SYSTEM_PROMPT},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_data}"}}
+                ]
+            }
+        ],
+        "max_tokens": 800
+    }
+    headers = {
+    "api-key": AZURE_OPENAI_KEY,
+    "Content-Type": "application/json",
+}
+    response = requests.post(AZURE_OPENAI_ENDPOINT, json=payload, headers=headers)
+    result = response.json()
+    print(result["choices"][0]["message"]["content"])
+    return json.loads(result["choices"][0]["message"]["content"])
     content = response.choices[0].message.content
     try:
         return json.loads(content)
@@ -85,33 +94,22 @@ def convert_pdf_to_images(pdf_path):
 
 def upload_file_to_blob(file_path: str, blob_name: str = None):
     """Uploads a local file to Azure Blob Storage"""
-    if not all([ACCOUNT_NAME, ACCOUNT_KEY, CONTAINER_NAME]):
+    if not all([AZURE_SAS_URL, CONTAINER_NAME]):
         raise ValueError("Azure Storage credentials or container name missing from .env file")
 
-    # Construct the connection string manually
-    conn_str = f"DefaultEndpointsProtocol=https;AccountName={ACCOUNT_NAME};AccountKey={ACCOUNT_KEY};EndpointSuffix=core.windows.net"
-
-    # Create BlobServiceClient
-    blob_service_client = BlobServiceClient.from_connection_string(conn_str)
-
-    # Get container client
-    container_client = blob_service_client.get_container_client(CONTAINER_NAME)
-
-    # Ensure the container exists
-    container_client.create_container(exist_ok=True)
+    # Create blobcontainerclient
+    blob_container_client = ContainerClient.from_container_url(AZURE_SAS_URL)
 
     # Use file name as blob name if not specified
     if blob_name is None:
         blob_name = os.path.basename(file_path)
 
     print(f"Uploading {file_path} → {CONTAINER_NAME}/{blob_name}")
-    blob_path = f"{CONTAINER_NAME}/{blob_name}"
-    # Get blob client
-    blob_client = container_client.get_blob_client(blob_name)
+    blob_path = f"{AZURE_SAS_URL.split('?')[0]}/{blob_name}?{AZURE_SAS_URL.split('?')[1]}"
 
     # Upload file
     with open(file_path, "rb") as data:
-        blob_client.upload_blob(data, overwrite=True)
+        blob_container_client.upload_blob(name=blob_name, data=data, overwrite=True)
 
     print("✅ Upload complete!")
     return blob_path

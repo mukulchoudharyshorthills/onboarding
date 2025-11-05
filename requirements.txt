@@ -8,3 +8,5 @@ azure-core
 pytest
 pytest-mock
 azure-storage-blob
+azure.cosmos
+azure-identity
