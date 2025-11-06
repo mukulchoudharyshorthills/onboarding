@@ -17,37 +17,26 @@ def ping():
 
 @app.route('/test', methods=['POST'])
 def test():
-    if 'files' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
+    username = 'test'
+    password = 'test'
+    if not username or not password:
+        return jsonify({'error': 'Missing username or password'}), 400
 
-    allowed_ext = ('.pdf', '.png', '.jpg', '.jpeg', '.tiff', '.tif')
-    files = request.files.getlist('files')
-    uploadedFiles = []
-    responses = []
-    for file in files:
-        if file.filename == '':
-            responses.append({'error': 'No selected file', 'filename': file.filename})
-            continue
-        if not file.filename.lower().endswith(allowed_ext):
-            return jsonify({'error': 'Please upload a PDF or image file'}), 400
-        #prompt_file = f"./prompts/prompt_file.txt"
-        file_path = f"./input/{file.filename}"
-        
-        if os.path.exists(file_path):
-            timestamp = int(time.time())
-            name, ext = os.path.splitext(file.filename)
-            file.filename = f"{name}_{timestamp}{ext}"
-            file_path = f"./input/{file.filename}"
-        file.save(file_path)
-        #blob_path = upload_file_to_blob(file_path, file.filename)
-        images = convert_pdf_to_images(file_path)
-        results = []
-        for img_path in images:
-            pii = extract_pii_from_image(img_path)
-            results.append(pii)
-        uploadedFiles.append({'filename': file.filename, 'result': results})
+    user = users.find_one({"username": username})
+    if not user:
+        users.insert_one({"username": username, "password": password, "status": "unverified"})
 
-    return jsonify({'message': 'File(s) uploaded successfully', 'uploaded_files': uploadedFiles }), 200
+    user = users.find_one({"username": username})
+
+    result = loginlogs.insert_one({
+        "user_id": user["_id"],
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "timestamp": int(time.time()),
+        "action": "login"
+    })
+    logs = log_helper(loginlogs.find_one({"_id": result.inserted_id}))
+
+    return jsonify({'message': 'File(s) uploaded successfully', 'logs': logs }), 200
 
 @app.route('/login', methods=['GET'])
 def login():
@@ -62,14 +51,15 @@ def login():
 
     user = users.find_one({"username": username})
 
-    loginlogs.insert_one({
+    result = loginlogs.insert_one({
         "user_id": user["_id"],
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "timestamp": int(time.time()),
         "action": "login"
     })
+    logs = log_helper(loginlogs.find_one({"_id": result.inserted_id}))
 
-    return jsonify({'message': 'Login successful'}), 200
+    return jsonify({'message': 'Login successful', 'logs': logs}), 200
 
 @app.route('/user', methods=['GET'])
 def getUsers():
