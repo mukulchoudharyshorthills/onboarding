@@ -133,6 +133,7 @@ def upload_file():
             "data": results,
             "status": "unverified"
         })
+        os.remove(file_path)
         uploadedFiles.append(document_helper(documents.find_one({"_id": result.inserted_id})))
 
     
@@ -185,7 +186,7 @@ def editedDocData():
         return jsonify({'error': 'Missing updated data'}), 400
 
     result = documents.update_one(
-        {"_id": id, "status": "unverified"},
+        {"_id": ObjectId(id), "status": "unverified"},
         {"$set": {"edited_data": updatedData, "status": "verified"}}
     )
     return jsonify({'message': 'Data edited and marked verified successfully'}), 200

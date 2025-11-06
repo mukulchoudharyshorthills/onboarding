@@ -35,6 +35,7 @@ def document_helper(document) -> dict:
     "id": str(document["_id"]),
     "user_id":str(document["user_id"]),
     "path": document["path"],
+    "blob_path": document["blob_path"],
     "title": document["title"],
     "tag": document["tag"],
     "data": document.get("data") or "",
