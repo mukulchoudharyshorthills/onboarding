@@ -20,7 +20,7 @@ flowchart TD
     M --> N[Update DB - Edited & Verified by user]
 
 Steps to run the project:
-1.pip install -r requirements.txt
+1. pip install -r requirements.txt
 2. python app.py
 
 api's:
@@ -31,18 +31,19 @@ api's:
 5. /logs
 6. /verifyDocumentData
 7. /editedDocumentData
+8. /user
 
 DB used:
-azure cosmos DB
+    azure cosmos DB
 
 storage used:
-azure blob storage
+    azure blob storage
 
 ai used:
-azure openai
+    azure openai
 
 model used: 
-gpt-4o
+    gpt-4o
 
 Allowed files:
-pdf & images
+    pdf & images

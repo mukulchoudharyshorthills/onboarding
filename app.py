@@ -47,7 +47,7 @@ def login():
 
     user = users.find_one({"username": username})
     if not user:
-        users.insert_one({"username": username, "password": password, "status": "unverified"})
+        users.insert_one({"username": username, "password": password, "email": username, "status": "unverified"})
 
     user = users.find_one({"username": username})
 
@@ -70,6 +70,8 @@ def getUsers():
     user = user_helper(users.find_one({"_id": ObjectId(user_id)}))
     if not user:
         return jsonify({'error': 'user not found'}), 400
+    profile = fetchUserProfile(user_id)
+    user['profile'] = profile
     return jsonify({'message': 'user fetched', 'user': user}), 200
 
 @app.route('/logout', methods=['GET'])
@@ -92,6 +94,7 @@ def upload_file():
     if 'files' not in request.files:
         return jsonify({'error': 'No file part'}), 400
 
+    tag = request.form.get('tag', '')
     allowed_ext = ('.pdf', '.png', '.jpg', '.jpeg', '.tiff', '.tif')
     files = request.files.getlist('files')
     uploadedFiles = []
@@ -114,14 +117,15 @@ def upload_file():
         blob_path = upload_file_to_blob(file_path, file.filename)
 
         results = []
-        if file.filename.lower().endswith('.pdf'):
-            images = convert_pdf_to_images(file_path)
-            for img_path in images:
-                pii = extract_pii_from_image(img_path)
+        if tag != "photo":
+            if file.filename.lower().endswith('.pdf'):
+                images = convert_pdf_to_images(file_path)
+                for img_path in images:
+                    pii = extract_pii_from_image(img_path)
+                    results.append(pii)
+            else:
+                pii = extract_pii_from_image(file_path)
                 results.append(pii)
-        else:
-            pii = extract_pii_from_image(file_path)
-            results.append(pii)
         
         print(results)
         result = documents.insert_one({
@@ -190,6 +194,44 @@ def editedDocData():
         {"$set": {"edited_data": updatedData, "status": "verified"}}
     )
     return jsonify({'message': 'Data edited and marked verified successfully'}), 200
+
+def fetchUserProfile(user_id):
+    tags = ["personal", "employment", "location", "certificates", "photo"]
+
+    profileData = {}
+    for tag in tags:
+        tagDocs = documents.find({"user_id": ObjectId(user_id), "tag": tag})
+        tagData = {}
+        for doc in tagDocs:
+            data = doc.get("data", [])
+            if tag == "personal" or tag == "photo":
+                for item in data:
+                    for key, value in item.items():
+                        if key not in profileData:
+                            profileData[key] = value
+                        else:
+                            originalkey = key
+                            counter = 1
+                            while key in profileData:
+                                key = f"{originalkey}_{counter}"
+                                counter += 1
+                            profileData[key] = value
+            else:
+                for item in data:
+                    for key, value in item.items():
+                        if key not in tagData:
+                            tagData[key] = value
+                        else:
+                            originalkey = key
+                            counter = 1
+                            while key in tagData:
+                                key = f"{originalkey}_{counter}"
+                                counter += 1
+                            tagData[key] = value
+        
+        if tag != "personal" and tag != "photo":    
+            profileData[tag] = tagData
+    return profileData   
 
 if __name__ == '__main__':
    app.debug = True

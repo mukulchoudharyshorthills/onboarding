@@ -19,6 +19,7 @@ def user_helper(user) -> dict:
     "id": str(user["_id"]),
     "username": user["username"],
     "password": user["password"],
+    "email": user.get("email") or "",
     "status": user["status"]
     }
 
