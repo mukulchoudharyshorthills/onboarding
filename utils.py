@@ -19,12 +19,8 @@ CONTAINER_NAME = os.getenv("AZURE_CONTAINER_NAME")
 client = ChatCompletionsClient(endpoint=AZURE_OPENAI_ENDPOINT, credential=AzureKeyCredential(AZURE_OPENAI_KEY))
 
 
-#SYSTEM_PROMPT = (
-#    "You are an AI assistant extracting personal identifiable information (PII) from an image. "
-#    "Return JSON with fields: name, email, phone, address, date_of_birth."
-#)
-SYSTEM_PROMPT = (
-    """You are a data entry professional and you must analyze a document, extract relevant information and report it. 
+SYSTEM_PROMPT = {
+    'personal':"""You are a data entry professional and you must analyze a document, extract relevant information and report it. 
 
     I'll give you a pdf document or a image from which you must extract personal identifiable information (PII).
 
@@ -33,10 +29,42 @@ SYSTEM_PROMPT = (
 
     * Output *
     You must extract the personal information and return them as a valid JSON object. Dont add word json to the result.
-    """
-)
+    """,
+    'employment':"""You are an intelligent document processing assistant. Extract all available employment information from this document and provide it in structured JSON format. Include, if available:
+                    Employee Name
+                    Employer Name
+                    Job Title / Designation
+                    Start Date of Employment
+                    End Date (or mark as 'current' if still employed)
+                    Department (if available)
+                    Employment Type (full-time, part-time, contract, etc.)
+                    Salary or Compensation Details
+                    Address of Employer
+                    Additional relevant employment details
+                    Only extract what is explicitly available in the document, with no fabrication. If a field is missing, leave it null or indicate 'not present.Dont add word json to the result'""",
+    'education':"""Analyze the uploaded education document (such as a transcript, diploma, or certificate) and extract all relevant user education information in a structured JSON format. Please identify and output the following fields if present:
+                    Full Name of student
+                    Institution/School/University name
+                    Degree or qualification awarded
+                    Course or major subject
+                    Date of issue or graduation date
+                    Grades, marks, GPA, or classification
+                    Duration or academic year(s)
+                    Any honors or distinctions
+                    Extract only information explicitly visible in the document. If a field is missing, output it as null or 'not present.' Do not invent any data. Dont add word json to the result""",
+    'certificates':"""Analyze the uploaded certificate document (PDF or image) and extract all relevant user information available in the certificate. Please identify and output the following fields in a structured JSON format if present:
+                    Full Name
+                    Date of Birth
+                    Certificate Number
+                    Date of Issue
+                    Expiry Date (if applicable)
+                    Issuing Authority / Organization
+                    Any grades, scores, or honors mentioned
+                    Relevant descriptive fields such as course or certification name
+                    Extract only the information explicitly visible in the document. If a field is missing, output null or 'not present'. Do not invent or guess any data.Dont add word json to the result"""
+}
 
-def extract_pii_from_image(image_path):
+def extract_pii_from_image(image_path: str, tag: str):
     with open(image_path, 'rb') as img_file:
         img_bytes = img_file.read()
         img_data = base64.b64encode(img_bytes).decode('utf-8')
@@ -55,12 +83,13 @@ def extract_pii_from_image(image_path):
         model=AZURE_OPENAI_DEPLOYMENT,
         messages=messages
     )"""
+    print(SYSTEM_PROMPT[tag])
     payload = {
         "messages": [
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": SYSTEM_PROMPT},
+                    {"type": "text", "text": SYSTEM_PROMPT[tag]},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_data}"}}
                 ]
             }
@@ -75,11 +104,6 @@ def extract_pii_from_image(image_path):
     result = response.json()
     print(result["choices"][0]["message"]["content"])
     return json.loads(result["choices"][0]["message"]["content"])
-    content = response.choices[0].message.content
-    try:
-        return json.loads(content)
-    except Exception:
-        return {"raw": content}
 
 def convert_pdf_to_images(pdf_path):
     doc = fitz.open(pdf_path)

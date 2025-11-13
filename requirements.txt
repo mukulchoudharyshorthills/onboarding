@@ -10,3 +10,5 @@ pytest-mock
 azure-storage-blob
 azure.cosmos
 azure-identity
+requests
+flask-cors

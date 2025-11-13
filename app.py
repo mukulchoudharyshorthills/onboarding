@@ -8,35 +8,17 @@ import time
 from datetime import datetime
 from bson import ObjectId
 from utils import convert_pdf_to_images, extract_pii_from_image, upload_file_to_blob
-
+from flask_cors import CORS
 app = Flask(__name__)
+CORS(app, origins=['*'])
 
 @app.route('/ping')
 def ping():
    return 'pong!'
 
-@app.route('/test', methods=['POST'])
+@app.route('/test', methods=['POST', 'GET'])
 def test():
-    username = 'test'
-    password = 'test'
-    if not username or not password:
-        return jsonify({'error': 'Missing username or password'}), 400
-
-    user = users.find_one({"username": username})
-    if not user:
-        users.insert_one({"username": username, "password": password, "status": "unverified"})
-
-    user = users.find_one({"username": username})
-
-    result = loginlogs.insert_one({
-        "user_id": user["_id"],
-        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "timestamp": int(time.time()),
-        "action": "login"
-    })
-    logs = log_helper(loginlogs.find_one({"_id": result.inserted_id}))
-
-    return jsonify({'message': 'File(s) uploaded successfully', 'logs': logs }), 200
+    return jsonify({'message': 'Tested successfully' }), 200
 
 @app.route('/login', methods=['GET'])
 def login():
@@ -59,7 +41,7 @@ def login():
     })
     logs = log_helper(loginlogs.find_one({"_id": result.inserted_id}))
 
-    return jsonify({'message': 'Login successful', 'logs': logs}), 200
+    return jsonify({'message': 'Login successful', 'token':username, 'logs': logs}), 200
 
 @app.route('/user', methods=['GET'])
 def getUsers():
@@ -67,9 +49,10 @@ def getUsers():
     if not user_id:
         return jsonify({'error': 'Missing user_id'}), 400
 
-    user = user_helper(users.find_one({"_id": ObjectId(user_id)}))
+    user = users.find_one({"_id": ObjectId(user_id)})
     if not user:
         return jsonify({'error': 'user not found'}), 400
+    user = user_helper(user)
     profile = fetchUserProfile(user_id)
     user['profile'] = profile
     return jsonify({'message': 'user fetched', 'user': user}), 200
@@ -117,14 +100,16 @@ def upload_file():
         blob_path = upload_file_to_blob(file_path, file.filename)
 
         results = []
+        if tag == "photo":
+            results.append({"photo_url": blob_path})
         if tag != "photo":
             if file.filename.lower().endswith('.pdf'):
                 images = convert_pdf_to_images(file_path)
                 for img_path in images:
-                    pii = extract_pii_from_image(img_path)
+                    pii = extract_pii_from_image(img_path, tag)
                     results.append(pii)
             else:
-                pii = extract_pii_from_image(file_path)
+                pii = extract_pii_from_image(file_path, tag)
                 results.append(pii)
         
         print(results)
@@ -196,12 +181,14 @@ def editedDocData():
     return jsonify({'message': 'Data edited and marked verified successfully'}), 200
 
 def fetchUserProfile(user_id):
-    tags = ["personal", "employment", "location", "certificates", "photo"]
+    tags = ["personal", "employment", "education", "certificates", "photo"]
 
     profileData = {}
     for tag in tags:
         tagDocs = documents.find({"user_id": ObjectId(user_id), "tag": tag})
+        #tagDataArr = []
         tagData = {}
+        tagArr = []
         for doc in tagDocs:
             data = doc.get("data", [])
             if tag == "personal" or tag == "photo":
@@ -210,13 +197,16 @@ def fetchUserProfile(user_id):
                         if key not in profileData:
                             profileData[key] = value
                         else:
+                            if value == profileData[key]:
+                                continue
                             originalkey = key
                             counter = 1
                             while key in profileData:
                                 key = f"{originalkey}_{counter}"
                                 counter += 1
                             profileData[key] = value
-            else:
+            elif tag == "certificates" or tag == "employment" or tag == "education":
+                tagData = {}
                 for item in data:
                     for key, value in item.items():
                         if key not in tagData:
@@ -228,11 +218,45 @@ def fetchUserProfile(user_id):
                                 key = f"{originalkey}_{counter}"
                                 counter += 1
                             tagData[key] = value
+                tagArr.append(tagData)
+            else:
+                #tagData = {}
+                for item in data:
+                    for key, value in item.items():
+                        if key.lower() not in tagData:
+                            tagData[key.lower()] = value
+                        else:
+                            if value == tagData[key.lower()]:
+                                continue
+                            originalkey = key.lower()
+                            counter = 1
+                            while key.lower() in tagData:
+                                key = f"{originalkey}_{counter}"
+                                counter += 1
+                            tagData[key.lower()] = value
+                #tagDataArr.append(tagData)
         
-        if tag != "personal" and tag != "photo":    
+        if tag != "personal" and tag != "photo" and tag != "certificates" and tag != "employment" and tag != "education":    
             profileData[tag] = tagData
+        if tag == "certificates" or tag == "employment" or tag == "education":
+            profileData[tag] = tagArr
     return profileData   
 
 if __name__ == '__main__':
    app.debug = True
    app.run(port=8000)
+
+"""elif tag == "certificates":
+                tagData = {}
+                for item in data:
+                    for key, value in item.items():
+                        if key not in tagData:
+                            tagData[key] = value
+                        else:
+                            originalkey = key
+                            counter = 1
+                            while key in tagData:
+                                key = f"{originalkey}_{counter}"
+                                counter += 1
+                            tagData[key] = value
+                tagArr.append(tagData)"""
